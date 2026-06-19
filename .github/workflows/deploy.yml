@@ -1,0 +1,90 @@
+name: Deploy Vite Frontend App
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - stage
+      - prod
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          npm install --legacy-peer-deps
+
+      - name: Run Linting
+        run: |
+          npm run lint
+
+      - name: Build Application
+        run: |
+          npm run build
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-dist
+          path: dist/
+
+  deploy-stage:
+    if: github.ref == 'refs/heads/stage'
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Build Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build-dist
+          path: dist
+
+      # ----------------------------
+      #   🔥 Upload built files to Stage VPS directory
+      # ----------------------------
+      - name: Copy build files to EC2 Stage
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.REMOTE_HOST }}
+          username: ${{ secrets.REMOTE_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "dist/*"
+          target: ${{ secrets.FRONTEND_STAGE_PATH }}
+          strip_components: 1
+          overwrite: true
+
+  deploy-prod:
+    if: github.ref == 'refs/heads/prod'
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Build Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build-dist
+          path: dist
+
+      # ----------------------------
+      #   🔥 Upload built files to Prod VPS directory
+      # ----------------------------
+      - name: Copy build files to EC2 Prod
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.REMOTE_HOST }}
+          username: ${{ secrets.REMOTE_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "dist/*"
+          target: ${{ secrets.FRONTEND_PROD_PATH }}
+          strip_components: 1
+          overwrite: true
+
